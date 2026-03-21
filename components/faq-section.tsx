@@ -22,9 +22,9 @@ const FAQS = [
       "Cuando el agente necesita acciones adicionales como automatización, lógica extendida o capacidades más allá de la conversación base. Se cobran por concurrencia activa.",
   },
   {
-    question: "¿Cómo funciona WhatsApp dentro del modelo?",
+    question: "¿Qué cosas son globales y cuáles son por agente?",
     answer:
-      "Además de la renta base por herramienta inteligente, WhatsApp puede generar cargos por mensaje según el tipo de plantilla y por la creación inicial de plantillas. Meta aprueba y clasifica las plantillas como marketing o utilidad.",
+      "Minutos mensuales y plataforma Conbiz viven a nivel global. Desarrollo, concurrencia, herramientas inteligentes, geolocalización y rentas personalizadas se configuran por cada agente dentro de la cotización.",
   },
   {
     question: "¿Qué cubre la plataforma Conbiz?",

@@ -1,13 +1,61 @@
-import type { PricingMode, QuoteBreakdown, QuoteInputs } from "@/lib/pricing";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import type { PricingMode } from "@/lib/pricing";
+import { formatNumber } from "@/lib/utils";
+
+type CurrencyCode = "USD" | "MXN";
 
 type PrintableQuoteViewProps = {
   mode: PricingMode;
-  inputs: QuoteInputs;
-  breakdown: QuoteBreakdown;
+  minuteRate: number;
+  minutes: number;
+  setupSubtotal: number;
+  monthlySubtotal: number;
+  guaranteeDeposit: number;
+  totalStartup: number;
+  globalMonthlySubtotal: number;
+  platformMonthlySubtotal: number;
+  agents: Array<{
+    id: string;
+    name: string;
+    setupSubtotal: number;
+    monthlySubtotal: number;
+    monthlyDetails: Array<{ label: string; value: string }>;
+  }>;
+  currency: CurrencyCode;
+  exchangeRate: number | null;
+  exchangeRateDate: string | null;
+  exchangeRateSource: string | null;
 };
 
-export function PrintableQuoteView({ mode, inputs, breakdown }: PrintableQuoteViewProps) {
+function money(value: number, currency: CurrencyCode, exchangeRate: number | null) {
+  const converted = currency === "MXN" && exchangeRate ? value * exchangeRate : value;
+  const displayCurrency = currency === "MXN" && exchangeRate ? "MXN" : "USD";
+  return new Intl.NumberFormat(displayCurrency === "MXN" ? "es-MX" : "en-US", {
+    style: "currency",
+    currency: displayCurrency,
+    maximumFractionDigits: 2,
+  }).format(converted);
+}
+
+export function PrintableQuoteView({
+  mode,
+  minuteRate,
+  minutes,
+  setupSubtotal,
+  monthlySubtotal,
+  guaranteeDeposit,
+  totalStartup,
+  globalMonthlySubtotal,
+  platformMonthlySubtotal,
+  agents,
+  currency,
+  exchangeRate,
+  exchangeRateDate,
+  exchangeRateSource,
+}: PrintableQuoteViewProps) {
+  const upfrontTotal = setupSubtotal + guaranteeDeposit;
+  const firstMonthTotal = upfrontTotal + monthlySubtotal;
+  const secondMonthTotal = monthlySubtotal;
+
   return (
     <section className="printable-area hidden print:block">
       <div className="space-y-8 p-10">
@@ -18,8 +66,10 @@ export function PrintableQuoteView({ mode, inputs, breakdown }: PrintableQuoteVi
           </div>
           <div className="text-right text-sm text-stone-600">
             <p>Esquema: {mode === "client" ? "Cliente final" : "Reseller"}</p>
-            <p>Minutos estimados: {formatNumber(inputs.minutes)}</p>
-            <p>Concurrencia: {formatNumber(inputs.concurrency)}</p>
+            <p>Minutos globales: {formatNumber(minutes)}</p>
+            <p>Tipo de cambio: {currency === "MXN" && exchangeRate ? `${exchangeRate.toFixed(4)} MXN/USD` : "USD"}</p>
+            {exchangeRateDate ? <p>{exchangeRateDate}</p> : null}
+            {exchangeRateSource ? <p>{exchangeRateSource}</p> : null}
           </div>
         </div>
 
@@ -28,16 +78,12 @@ export function PrintableQuoteView({ mode, inputs, breakdown }: PrintableQuoteVi
             <h2 className="text-lg font-semibold text-stone-950">Setup</h2>
             <div className="rounded-2xl border border-stone-200 p-4">
               <div className="flex justify-between py-2 text-sm">
-                <span>Desarrollo ({inputs.developmentHours} horas)</span>
-                <span>{formatCurrency(breakdown.setupDevelopment)}</span>
-              </div>
-              <div className="flex justify-between py-2 text-sm">
-                <span>Plantillas WhatsApp</span>
-                <span>{formatCurrency(breakdown.setupWhatsAppTemplates)}</span>
+                <span>Desarrollo de agentes</span>
+                <span>{money(setupSubtotal, currency, exchangeRate)}</span>
               </div>
               <div className="mt-2 flex justify-between border-t border-stone-200 pt-3 font-semibold">
                 <span>Total setup</span>
-                <span>{formatCurrency(breakdown.setupSubtotal)}</span>
+                <span>{money(setupSubtotal, currency, exchangeRate)}</span>
               </div>
             </div>
           </div>
@@ -46,32 +92,32 @@ export function PrintableQuoteView({ mode, inputs, breakdown }: PrintableQuoteVi
             <h2 className="text-lg font-semibold text-stone-950">Mensual</h2>
             <div className="rounded-2xl border border-stone-200 p-4">
               <div className="flex justify-between py-2 text-sm">
-                <span>Minutos</span>
-                <span>{formatCurrency(breakdown.monthlyMinutes)}</span>
-              </div>
-              <div className="flex justify-between py-2 text-sm">
-                <span>Concurrencia</span>
-                <span>{formatCurrency(breakdown.monthlyConcurrency)}</span>
-              </div>
-              <div className="flex justify-between py-2 text-sm">
-                <span>Herramientas inteligentes</span>
-                <span>{formatCurrency(breakdown.monthlyToolsBase)}</span>
+                <span>Minutos globales</span>
+                <span>{money(globalMonthlySubtotal, currency, exchangeRate)}</span>
               </div>
               <div className="flex justify-between py-2 text-sm">
                 <span>Plataforma Conbiz</span>
-                <span>{formatCurrency(breakdown.monthlyPlatform)}</span>
+                <span>{money(platformMonthlySubtotal, currency, exchangeRate)}</span>
               </div>
-              <div className="flex justify-between py-2 text-sm">
-                <span>WhatsApp</span>
-                <span>{formatCurrency(breakdown.monthlyWhatsAppMarketing + breakdown.monthlyWhatsAppUtility)}</span>
-              </div>
-              <div className="flex justify-between py-2 text-sm">
-                <span>Geolocalización</span>
-                <span>{formatCurrency(breakdown.monthlyGeolocation)}</span>
-              </div>
+              {agents.map((agent) => (
+                <div key={`${agent.id}-monthly`} className="py-2 text-sm">
+                  <div className="flex justify-between gap-4">
+                    <span>{agent.name}</span>
+                    <span>{money(agent.monthlySubtotal, currency, exchangeRate)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {agent.monthlyDetails.map((item) => (
+                      <div key={`${item.label}-${item.value}`} className="flex justify-between gap-4 text-xs text-stone-500">
+                        <span>{item.label}</span>
+                        <span>{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
               <div className="mt-2 flex justify-between border-t border-stone-200 pt-3 font-semibold">
                 <span>Total mensual</span>
-                <span>{formatCurrency(breakdown.monthlySubtotal)}</span>
+                <span>{money(monthlySubtotal, currency, exchangeRate)}</span>
               </div>
             </div>
           </div>
@@ -79,17 +125,33 @@ export function PrintableQuoteView({ mode, inputs, breakdown }: PrintableQuoteVi
 
         <div className="rounded-2xl border border-stone-200 bg-stone-50 p-5">
           <div className="flex justify-between py-2 text-sm">
+            <span>Desarrollo de agentes</span>
+            <span>{money(setupSubtotal, currency, exchangeRate)}</span>
+          </div>
+          <div className="flex justify-between py-2 text-sm">
             <span>Depósito de garantía</span>
-            <span>{formatCurrency(breakdown.guaranteeDeposit)}</span>
+            <span>{money(guaranteeDeposit, currency, exchangeRate)}</span>
           </div>
           <div className="mt-2 flex justify-between border-t border-stone-300 pt-3 text-lg font-semibold">
             <span>Total de arranque estimado</span>
-            <span>{formatCurrency(breakdown.totalStartup)}</span>
+            <span>{money(upfrontTotal, currency, exchangeRate)}</span>
           </div>
           <p className="mt-4 text-sm leading-relaxed text-stone-600">
             El depósito es reembolsable al finalizar el servicio y los minutos mensuales contratados no se acumulan al
             siguiente periodo.
           </p>
+        </div>
+
+        <div className="rounded-2xl border border-stone-200 p-5">
+          <p className="text-xs uppercase tracking-[0.18em] text-stone-500">Totales clave</p>
+          <div className="mt-3 flex justify-between py-2 text-sm font-semibold">
+            <span>Total primer mes</span>
+            <span>{money(firstMonthTotal, currency, exchangeRate)}</span>
+          </div>
+          <div className="mt-2 flex justify-between border-t border-stone-200 pt-3 text-sm font-semibold">
+            <span>Total a partir del segundo mes</span>
+            <span>{money(secondMonthTotal, currency, exchangeRate)}</span>
+          </div>
         </div>
       </div>
     </section>

@@ -5,10 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-MX", {
+export type CurrencyCode = "USD" | "MXN";
+
+export function formatCurrency(value: number, currency: CurrencyCode = "USD") {
+  const locale = currency === "MXN" ? "es-MX" : "en-US";
+
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "USD",
+    currency,
     maximumFractionDigits: 2,
   }).format(value);
 }

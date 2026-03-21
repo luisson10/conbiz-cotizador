@@ -1,49 +1,94 @@
 export type PricingMode = "client" | "reseller";
 
-export type QuoteInputs = {
+export type GlobalQuoteInputs = {
   minutes: number;
-  concurrency: number;
-  developmentHours: number;
   includePlatform: boolean;
+};
+
+export type AgentQuoteInputs = {
+  id: string;
+  name: string;
+  developmentHours: number;
+  concurrency: number;
   includeIntelligentTools: boolean;
   useWhatsApp: boolean;
   marketingMessages: number;
   utilityMessages: number;
   whatsappTemplates: number;
+  includeGeolocation: boolean;
   geolocationQueries: number;
+  includeCustomTool: boolean;
+  customToolName: string;
+  customToolMonthly: number;
+};
+
+export type AgentBreakdown = {
+  id: string;
+  name: string;
+  developmentHours: number;
+  monthlyConcurrency: number;
+  monthlyToolsBase: number;
+  monthlyWhatsAppMarketing: number;
+  monthlyWhatsAppUtility: number;
+  monthlyGeolocation: number;
+  monthlyCustomTool: number;
+  setupWhatsAppTemplates: number;
+  monthlySubtotal: number;
+  setupDevelopment: number;
+  setupSubtotal: number;
 };
 
 export type QuoteBreakdown = {
   minuteRate: number;
   monthlyMinutes: number;
-  monthlyConcurrency: number;
-  monthlyToolsBase: number;
   monthlyPlatform: number;
-  monthlyWhatsAppMarketing: number;
-  monthlyWhatsAppUtility: number;
-  monthlyGeolocation: number;
-  setupDevelopment: number;
-  setupWhatsAppTemplates: number;
+  agents: AgentBreakdown[];
+  monthlyAgents: number;
   monthlySubtotal: number;
   setupSubtotal: number;
   guaranteeDeposit: number;
   totalStartup: number;
 };
 
-export const DEFAULT_QUOTE_INPUTS: QuoteInputs = {
+export type PricingConfig = {
+  minuteRate: {
+    client: number;
+    reseller: number;
+  };
+  developmentBasePrice: number;
+  developmentBaseHours: number;
+  concurrency: number;
+  intelligentTool: number;
+  platform: number;
+  whatsappMarketing: number;
+  whatsappUtility: number;
+  whatsappTemplate: number;
+  geolocation: number;
+};
+
+export const DEFAULT_GLOBAL_INPUTS: GlobalQuoteInputs = {
   minutes: 5000,
-  concurrency: 4,
-  developmentHours: 100,
   includePlatform: true,
+};
+
+export const DEFAULT_AGENT_INPUTS: AgentQuoteInputs = {
+  id: "agent-1",
+  name: "Agente 1",
+  developmentHours: 100,
+  concurrency: 2,
   includeIntelligentTools: true,
   useWhatsApp: false,
   marketingMessages: 0,
   utilityMessages: 0,
   whatsappTemplates: 0,
+  includeGeolocation: false,
   geolocationQueries: 0,
+  includeCustomTool: false,
+  customToolName: "Herramienta personalizada",
+  customToolMonthly: 0,
 };
 
-export const PRICING = {
+export const PRICING: PricingConfig = {
   minuteRate: {
     client: 0.25,
     reseller: 0.21,
@@ -59,62 +104,82 @@ export const PRICING = {
   geolocation: 0.008,
 } as const;
 
-export function calculateQuote(mode: PricingMode, inputs: QuoteInputs): QuoteBreakdown {
-  const safeInputs = {
-    minutes: Math.max(inputs.minutes, 0),
-    concurrency: Math.max(inputs.concurrency, 0),
-    developmentHours: Math.max(inputs.developmentHours, 0),
-    marketingMessages: Math.max(inputs.marketingMessages, 0),
-    utilityMessages: Math.max(inputs.utilityMessages, 0),
-    whatsappTemplates: Math.max(inputs.whatsappTemplates, 0),
-    geolocationQueries: Math.max(inputs.geolocationQueries, 0),
+export function createAgent(index: number): AgentQuoteInputs {
+  return {
+    ...DEFAULT_AGENT_INPUTS,
+    id: `agent-${index + 1}`,
+    name: `Agente ${index + 1}`,
   };
+}
 
-  const minuteRate = PRICING.minuteRate[mode];
-  const monthlyMinutes = safeInputs.minutes * minuteRate;
-  const monthlyConcurrency = safeInputs.concurrency * PRICING.concurrency;
-  const monthlyToolsBase = inputs.includeIntelligentTools
-    ? safeInputs.concurrency * PRICING.intelligentTool
-    : 0;
-  const monthlyPlatform = inputs.includePlatform ? PRICING.platform : 0;
-  const monthlyWhatsAppMarketing = inputs.useWhatsApp
-    ? safeInputs.marketingMessages * PRICING.whatsappMarketing
-    : 0;
-  const monthlyWhatsAppUtility = inputs.useWhatsApp
-    ? safeInputs.utilityMessages * PRICING.whatsappUtility
-    : 0;
-  const monthlyGeolocation = safeInputs.geolocationQueries * PRICING.geolocation;
+export function calculateQuote(
+  mode: PricingMode,
+  globalInputs: GlobalQuoteInputs,
+  agents: AgentQuoteInputs[],
+  pricing: PricingConfig = PRICING,
+): QuoteBreakdown {
+  const minuteRate = pricing.minuteRate[mode];
+  const monthlyMinutes = Math.max(globalInputs.minutes, 0) * minuteRate;
+  const monthlyPlatform = globalInputs.includePlatform ? pricing.platform : 0;
+  const hourlyRate = pricing.developmentBasePrice / pricing.developmentBaseHours;
 
-  const hourlyRate = PRICING.developmentBasePrice / PRICING.developmentBaseHours;
-  const setupDevelopment = safeInputs.developmentHours * hourlyRate;
-  const setupWhatsAppTemplates = inputs.useWhatsApp
-    ? safeInputs.whatsappTemplates * PRICING.whatsappTemplate
-    : 0;
+  const agentBreakdowns = agents.map((agent) => {
+    const developmentHours = Math.max(agent.developmentHours, 0);
+    const concurrency = Math.max(agent.concurrency, 0);
+    const marketingMessages = Math.max(agent.marketingMessages, 0);
+    const utilityMessages = Math.max(agent.utilityMessages, 0);
+    const whatsappTemplates = Math.max(agent.whatsappTemplates, 0);
+    const geolocationQueries = Math.max(agent.geolocationQueries, 0);
+    const customToolMonthly = Math.max(agent.customToolMonthly, 0);
 
-  const monthlySubtotal =
-    monthlyMinutes +
-    monthlyConcurrency +
-    monthlyToolsBase +
-    monthlyPlatform +
-    monthlyWhatsAppMarketing +
-    monthlyWhatsAppUtility +
-    monthlyGeolocation;
+    const activeIntelligentTools =
+      Number(agent.useWhatsApp) + Number(agent.includeGeolocation) + Number(agent.includeCustomTool);
+    const monthlyConcurrency = concurrency * pricing.concurrency;
+    const monthlyToolsBase = activeIntelligentTools * concurrency * pricing.intelligentTool;
+    const monthlyWhatsAppMarketing = agent.useWhatsApp ? marketingMessages * pricing.whatsappMarketing : 0;
+    const monthlyWhatsAppUtility = agent.useWhatsApp ? utilityMessages * pricing.whatsappUtility : 0;
+    const monthlyGeolocation = agent.includeGeolocation ? geolocationQueries * pricing.geolocation : 0;
+    const monthlyCustomTool = agent.includeCustomTool ? customToolMonthly : 0;
+    const monthlySubtotal =
+      monthlyConcurrency +
+      monthlyToolsBase +
+      monthlyWhatsAppMarketing +
+      monthlyWhatsAppUtility +
+      monthlyGeolocation +
+      monthlyCustomTool;
+    const setupDevelopment = developmentHours * hourlyRate;
+    const setupWhatsAppTemplates = agent.useWhatsApp ? whatsappTemplates * pricing.whatsappTemplate : 0;
+    const setupSubtotal = setupDevelopment + setupWhatsAppTemplates;
 
-  const setupSubtotal = setupDevelopment + setupWhatsAppTemplates;
+    return {
+      id: agent.id,
+      name: agent.name,
+      developmentHours,
+      monthlyConcurrency,
+      monthlyToolsBase,
+      monthlyWhatsAppMarketing,
+      monthlyWhatsAppUtility,
+      monthlyGeolocation,
+      monthlyCustomTool,
+      setupWhatsAppTemplates,
+      monthlySubtotal,
+      setupDevelopment,
+      setupSubtotal,
+    };
+  });
+
+  const monthlyAgents = agentBreakdowns.reduce((sum, agent) => sum + agent.monthlySubtotal, 0);
+  const setupSubtotal = agentBreakdowns.reduce((sum, agent) => sum + agent.setupSubtotal, 0);
   const guaranteeDeposit = monthlyMinutes * 2;
-  const totalStartup = setupSubtotal + monthlySubtotal + guaranteeDeposit;
+  const monthlySubtotal = monthlyMinutes + monthlyPlatform + monthlyAgents;
+  const totalStartup = setupSubtotal + guaranteeDeposit;
 
   return {
     minuteRate,
     monthlyMinutes,
-    monthlyConcurrency,
-    monthlyToolsBase,
     monthlyPlatform,
-    monthlyWhatsAppMarketing,
-    monthlyWhatsAppUtility,
-    monthlyGeolocation,
-    setupDevelopment,
-    setupWhatsAppTemplates,
+    agents: agentBreakdowns,
+    monthlyAgents,
     monthlySubtotal,
     setupSubtotal,
     guaranteeDeposit,
@@ -122,17 +187,28 @@ export function calculateQuote(mode: PricingMode, inputs: QuoteInputs): QuoteBre
   };
 }
 
-export function buildWhatsAppMessage(mode: PricingMode, inputs: QuoteInputs, breakdown: QuoteBreakdown) {
+export function buildQuoteMessage(
+  mode: PricingMode,
+  globalInputs: GlobalQuoteInputs,
+  agents: AgentQuoteInputs[],
+  breakdown: QuoteBreakdown,
+) {
   const modeLabel = mode === "client" ? "Cliente final" : "Reseller";
+  const agentsSummary = agents
+    .map((agent, index) => {
+      return `Agente ${index + 1}: ${agent.name} | Concurrencia ${agent.concurrency} | Desarrollo ${agent.developmentHours}h`;
+    })
+    .join("\n");
 
   return [
-    "Hola, me interesa una cotizacion de Conbiz.",
+    "Resumen de cotizacion Conbiz",
     `Esquema: ${modeLabel}`,
-    `Minutos estimados: ${inputs.minutes}`,
-    `Concurrencia: ${inputs.concurrency}`,
-    `Horas de desarrollo: ${inputs.developmentHours}`,
-    `Costo setup estimado: $${breakdown.setupSubtotal.toFixed(2)} USD`,
-    `Costo mensual estimado: $${breakdown.monthlySubtotal.toFixed(2)} USD`,
+    `Minutos globales: ${globalInputs.minutes}`,
+    `Plataforma global: ${globalInputs.includePlatform ? "Si" : "No"}`,
+    `Agentes: ${agents.length}`,
+    agentsSummary,
+    `Setup estimado: $${breakdown.setupSubtotal.toFixed(2)} USD`,
+    `Mensual estimado: $${breakdown.monthlySubtotal.toFixed(2)} USD`,
     `Deposito de garantia: $${breakdown.guaranteeDeposit.toFixed(2)} USD`,
     `Total de arranque: $${breakdown.totalStartup.toFixed(2)} USD`,
   ].join("\n");

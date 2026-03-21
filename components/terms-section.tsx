@@ -8,7 +8,8 @@ const TERMS = [
   "El depósito de garantía se devuelve en su totalidad al terminar el servicio, sujeto al cierre correcto de la cuenta y obligaciones pendientes.",
   "El depósito podrá utilizarse de forma temporal para garantizar continuidad del servicio ante atraso o incumplimiento de pago.",
   "La concurrencia es la cantidad de llamadas simultáneas que un mismo agente puede sostener.",
-  "Las plantillas de WhatsApp deben darse de alta y Meta determinará si cada plantilla corresponde a marketing o utilidad.",
+  "Los costos globales incluyen minutos y, si se activa, la renta de plataforma Conbiz para toda la operación.",
+  "Los costos por agente incluyen desarrollo, concurrencia, herramientas inteligentes, geolocalización y cualquier renta mensual personalizada.",
   "Las herramientas inteligentes personalizadas para aplicativos específicos se cotizan como renta mensual independiente en lugar de desarrollo inicial.",
 ];
 

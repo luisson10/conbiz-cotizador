@@ -2,27 +2,31 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowDownRight, CheckCircle2, FileText, Waypoints } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowDownRight, CheckCircle2, FileText, Settings2, Waypoints } from "lucide-react";
 
 import { BusinessModelExplainer } from "@/components/business-model-explainer";
 import { FaqSection } from "@/components/faq-section";
+import { PricingConfigModal } from "@/components/pricing-config-modal";
 import { PricingModeToggle } from "@/components/pricing-mode-toggle";
 import { PrintableQuoteView } from "@/components/printable-quote-view";
 import { QuoteCalculatorForm } from "@/components/quote-calculator-form";
 import { QuoteSummaryCard } from "@/components/quote-summary-card";
 import { TermsSection } from "@/components/terms-section";
-import { WhatsAppCTA } from "@/components/whatsapp-cta";
+import { PdfExportCta } from "@/components/whatsapp-cta";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  buildWhatsAppMessage,
   calculateQuote,
-  DEFAULT_QUOTE_INPUTS,
+  createAgent,
+  DEFAULT_GLOBAL_INPUTS,
+  PRICING,
   type PricingMode,
-  type QuoteInputs,
+  type AgentQuoteInputs,
+  type GlobalQuoteInputs,
+  type PricingConfig,
 } from "@/lib/pricing";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, type CurrencyCode } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "#modelo", label: "Modelo" },
@@ -33,16 +37,158 @@ const NAV_ITEMS = [
 
 export function PricingPage() {
   const [mode, setMode] = useState<PricingMode>("client");
-  const [inputs, setInputs] = useState<QuoteInputs>(DEFAULT_QUOTE_INPUTS);
+  const [globalInputs, setGlobalInputs] = useState<GlobalQuoteInputs>(DEFAULT_GLOBAL_INPUTS);
+  const [agents, setAgents] = useState<AgentQuoteInputs[]>([createAgent(0)]);
+  const [pricingConfig, setPricingConfig] = useState<PricingConfig>(PRICING);
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
+  const [currency, setCurrency] = useState<CurrencyCode>("USD");
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [exchangeRateDate, setExchangeRateDate] = useState<string | null>(null);
+  const [exchangeRateSource, setExchangeRateSource] = useState<string | null>(null);
 
-  const breakdown = useMemo(() => calculateQuote(mode, inputs), [mode, inputs]);
-  const whatsappHref = useMemo(() => {
-    const message = buildWhatsAppMessage(mode, inputs, breakdown);
-    return `https://wa.me/?text=${encodeURIComponent(message)}`;
-  }, [mode, inputs, breakdown]);
+  const breakdown = useMemo(
+    () => calculateQuote(mode, globalInputs, agents, pricingConfig),
+    [mode, globalInputs, agents, pricingConfig],
+  );
 
-  const updateInput = <K extends keyof QuoteInputs>(key: K, value: QuoteInputs[K]) => {
-    setInputs((current) => ({ ...current, [key]: value }));
+  useEffect(() => {
+    const raw = window.localStorage.getItem("conbiz-pricing-config");
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as PricingConfig;
+      setPricingConfig(parsed);
+    } catch {
+      window.localStorage.removeItem("conbiz-pricing-config");
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("conbiz-pricing-config", JSON.stringify(pricingConfig));
+  }, [pricingConfig]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadExchangeRate() {
+      try {
+        const response = await fetch("/api/exchange-rate", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Exchange rate unavailable");
+        }
+
+        const data = (await response.json()) as {
+          rate: number | null;
+          date: string | null;
+          source: string | null;
+        };
+
+        if (!ignore) {
+          setExchangeRate(data.rate);
+          setExchangeRateDate(data.date);
+          setExchangeRateSource(data.source);
+        }
+      } catch {
+        if (!ignore) {
+          setExchangeRate(null);
+          setExchangeRateDate(null);
+          setExchangeRateSource(null);
+        }
+      }
+    }
+
+    void loadExchangeRate();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const agentSummary = breakdown.agents.map((agent) => ({
+    id: agent.id,
+    name: agent.name,
+    setupSubtotal: agent.setupSubtotal,
+    monthlySubtotal: agent.monthlySubtotal,
+    monthlyDetails: (() => {
+      const source = agents.find((item) => item.id === agent.id);
+      if (!source) return [];
+
+      const parts: Array<{ label: string; value: string }> = [
+        {
+          label: `${source.concurrency} concurrencias x ${formatCurrency(pricingConfig.concurrency)} c/u`,
+          value: formatCurrency(source.concurrency * pricingConfig.concurrency),
+        },
+      ];
+
+      if (source.useWhatsApp) {
+        parts.push({
+          label: `WhatsApp base: ${source.concurrency} x ${formatCurrency(pricingConfig.intelligentTool)}`,
+          value: formatCurrency(source.concurrency * pricingConfig.intelligentTool),
+        });
+      }
+      if (source.includeGeolocation) {
+        parts.push({
+          label: `Geolocalización base: ${source.concurrency} x ${formatCurrency(pricingConfig.intelligentTool)}`,
+          value: formatCurrency(source.concurrency * pricingConfig.intelligentTool),
+        });
+      }
+      if (source.includeCustomTool) {
+        parts.push({
+          label: `Personalizada base: ${source.concurrency} x ${formatCurrency(pricingConfig.intelligentTool)}`,
+          value: formatCurrency(source.concurrency * pricingConfig.intelligentTool),
+        });
+      }
+      if (source.useWhatsApp) {
+        if (source.marketingMessages > 0) {
+          parts.push({
+            label: `${source.marketingMessages} mensajes marketing x ${formatCurrency(pricingConfig.whatsappMarketing)}`,
+            value: formatCurrency(source.marketingMessages * pricingConfig.whatsappMarketing),
+          });
+        }
+        if (source.utilityMessages > 0) {
+          parts.push({
+            label: `${source.utilityMessages} mensajes utilitarios x ${formatCurrency(pricingConfig.whatsappUtility)}`,
+            value: formatCurrency(source.utilityMessages * pricingConfig.whatsappUtility),
+          });
+        }
+        if (source.whatsappTemplates > 0) {
+          parts.push({
+            label: `${source.whatsappTemplates} plantillas x ${formatCurrency(pricingConfig.whatsappTemplate)}`,
+            value: formatCurrency(source.whatsappTemplates * pricingConfig.whatsappTemplate),
+          });
+        }
+      }
+      if (source.includeGeolocation) {
+        parts.push({
+          label: `Geolocalización: ${source.geolocationQueries} consultas x ${formatCurrency(pricingConfig.geolocation)}`,
+          value: formatCurrency(source.geolocationQueries * pricingConfig.geolocation),
+        });
+      }
+      if (source.includeCustomTool && source.customToolMonthly > 0) {
+        parts.push({
+          label: source.customToolName,
+          value: formatCurrency(source.customToolMonthly),
+        });
+      }
+
+      return parts;
+    })(),
+  }));
+
+  const updateGlobalInput = <K extends keyof GlobalQuoteInputs>(key: K, value: GlobalQuoteInputs[K]) => {
+    setGlobalInputs((current) => ({ ...current, [key]: value }));
+  };
+
+  const updateAgentInput = <K extends keyof AgentQuoteInputs>(agentId: string, key: K, value: AgentQuoteInputs[K]) => {
+    setAgents((current) => current.map((agent) => (agent.id === agentId ? { ...agent, [key]: value } : agent)));
+  };
+
+  const addAgent = () => {
+    setAgents((current) => [...current, createAgent(current.length)]);
+  };
+
+  const removeAgent = (agentId: string) => {
+    setAgents((current) => (current.length === 1 ? current : current.filter((agent) => agent.id !== agentId)));
   };
 
   return (
@@ -97,6 +243,10 @@ export function PricingPage() {
                     <FileText className="h-4 w-4" />
                   </Link>
                 </Button>
+                <Button type="button" variant="secondary" size="lg" onClick={() => setIsPricingModalOpen(true)}>
+                  Variables de cálculo
+                  <Settings2 className="h-4 w-4" />
+                </Button>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-3">
@@ -105,12 +255,12 @@ export function PricingPage() {
                   <p className="mt-2 text-2xl font-semibold text-stone-950">{formatCurrency(breakdown.minuteRate)}</p>
                 </Card>
                 <Card className="rounded-2xl p-5">
-                  <p className="text-sm text-stone-500">Setup base</p>
-                  <p className="mt-2 text-2xl font-semibold text-stone-950">{formatCurrency(2800)}</p>
+                  <p className="text-sm text-stone-500">Setup base por agente</p>
+                  <p className="mt-2 text-2xl font-semibold text-stone-950">{formatCurrency(pricingConfig.developmentBasePrice)}</p>
                 </Card>
                 <Card className="rounded-2xl p-5">
-                  <p className="text-sm text-stone-500">Plataforma mensual</p>
-                  <p className="mt-2 text-2xl font-semibold text-stone-950">{formatCurrency(250)}</p>
+                  <p className="text-sm text-stone-500">Plataforma global</p>
+                  <p className="mt-2 text-2xl font-semibold text-stone-950">{formatCurrency(pricingConfig.platform)}</p>
                 </Card>
               </div>
             </div>
@@ -125,7 +275,7 @@ export function PricingPage() {
               <div className="mt-8 space-y-4">
                 {[
                   "Comparación inmediata entre tarifa cliente final y reseller",
-                  "Cálculo modular de minutos, concurrencia, setup y herramientas",
+                  "Modelo modular con costos globales y tarjetas por agente",
                   "Resumen listo para imprimir o exportar a PDF",
                   "Explicación operativa del depósito, prepago y reglas de servicio",
                 ].map((item) => (
@@ -147,29 +297,69 @@ export function PricingPage() {
                 Ajusta el escenario y obtén un desglose comercial listo para presentar.
               </h2>
               <p className="text-base leading-7 text-stone-600">
-                Cambia el tipo de cliente, volumen operativo y herramientas activas. El resumen considera setup,
-                mensualidad, depósito de garantía y total de arranque.
+                Minutos y plataforma viven a nivel global. Cada agente define su propio setup, concurrencia y
+                herramientas, y el resumen consolida todo en una sola cotización.
               </p>
             </div>
 
             <PricingModeToggle mode={mode} onChange={setMode} />
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-              <QuoteCalculatorForm inputs={inputs} onChange={updateInput} />
+              <QuoteCalculatorForm
+                globalInputs={globalInputs}
+                agents={agents}
+                onGlobalChange={updateGlobalInput}
+                onAgentChange={updateAgentInput}
+                onAddAgent={addAgent}
+                onRemoveAgent={removeAgent}
+              />
               <QuoteSummaryCard
                 mode={mode}
-                inputs={inputs}
-                breakdown={breakdown}
+                minuteRate={breakdown.minuteRate}
+                minutes={globalInputs.minutes}
+                setupSubtotal={breakdown.setupSubtotal}
+                monthlySubtotal={breakdown.monthlySubtotal}
+                guaranteeDeposit={breakdown.guaranteeDeposit}
+                totalStartup={breakdown.totalStartup}
+                globalMonthlySubtotal={breakdown.monthlyMinutes}
+                platformMonthlySubtotal={breakdown.monthlyPlatform}
+                agents={agentSummary}
+                currency={currency}
+                onCurrencyChange={setCurrency}
+                exchangeRate={exchangeRate}
+                exchangeRateDate={exchangeRateDate}
+                exchangeRateSource={exchangeRateSource}
                 onPrint={() => window.print()}
-                whatsappHref={whatsappHref}
               />
             </div>
           </section>
 
           <TermsSection />
           <FaqSection />
-          <WhatsAppCTA href={whatsappHref} />
-          <PrintableQuoteView mode={mode} inputs={inputs} breakdown={breakdown} />
+          <PdfExportCta onPrint={() => window.print()} />
+          <PricingConfigModal
+            open={isPricingModalOpen}
+            pricing={pricingConfig}
+            onClose={() => setIsPricingModalOpen(false)}
+            onChange={setPricingConfig}
+            onReset={() => setPricingConfig(PRICING)}
+          />
+          <PrintableQuoteView
+            mode={mode}
+            minuteRate={breakdown.minuteRate}
+            minutes={globalInputs.minutes}
+            setupSubtotal={breakdown.setupSubtotal}
+            monthlySubtotal={breakdown.monthlySubtotal}
+            guaranteeDeposit={breakdown.guaranteeDeposit}
+            totalStartup={breakdown.totalStartup}
+            globalMonthlySubtotal={breakdown.monthlyMinutes}
+            platformMonthlySubtotal={breakdown.monthlyPlatform}
+            agents={agentSummary}
+            currency={currency}
+            exchangeRate={exchangeRate}
+            exchangeRateDate={exchangeRateDate}
+            exchangeRateSource={exchangeRateSource}
+          />
         </main>
       </div>
     </div>
