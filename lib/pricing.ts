@@ -50,13 +50,9 @@ export type QuoteBreakdown = {
   totalStartup: number;
 };
 
-export type PricingConfig = {
-  minuteRate: {
-    client: number;
-    reseller: number;
-  };
-  developmentBasePrice: number;
-  developmentBaseHours: number;
+export type PricingRates = {
+  minuteRate: number;
+  developmentHourlyRate: number;
   concurrency: number;
   intelligentTool: number;
   platform: number;
@@ -64,6 +60,11 @@ export type PricingConfig = {
   whatsappUtility: number;
   whatsappTemplate: number;
   geolocation: number;
+};
+
+export type PricingConfig = {
+  client: PricingRates;
+  reseller: PricingRates;
 };
 
 export const DEFAULT_GLOBAL_INPUTS: GlobalQuoteInputs = {
@@ -89,20 +90,93 @@ export const DEFAULT_AGENT_INPUTS: AgentQuoteInputs = {
 };
 
 export const PRICING: PricingConfig = {
-  minuteRate: {
-    client: 0.25,
-    reseller: 0.21,
+  client: {
+    minuteRate: 0.25,
+    developmentHourlyRate: 28,
+    concurrency: 30,
+    intelligentTool: 8,
+    platform: 250,
+    whatsappMarketing: 0.1,
+    whatsappUtility: 0.03,
+    whatsappTemplate: 12,
+    geolocation: 0.008,
   },
-  developmentBasePrice: 2800,
-  developmentBaseHours: 100,
-  concurrency: 30,
-  intelligentTool: 8,
-  platform: 250,
-  whatsappMarketing: 0.1,
-  whatsappUtility: 0.03,
-  whatsappTemplate: 12,
-  geolocation: 0.008,
+  reseller: {
+    minuteRate: 0.21,
+    developmentHourlyRate: 28,
+    concurrency: 30,
+    intelligentTool: 8,
+    platform: 250,
+    whatsappMarketing: 0.1,
+    whatsappUtility: 0.03,
+    whatsappTemplate: 12,
+    geolocation: 0.008,
+  },
 } as const;
+
+export const PRICE_LIST_ITEMS = [
+  { key: "minuteRate", label: "Minuto mensual", description: "Tarifa por minuto consumido" },
+  { key: "platform", label: "Plataforma Conbiz mensual", description: "Renta global de monitoreo y gestión" },
+  { key: "concurrency", label: "Concurrencia mensual", description: "Costo por concurrencia activa" },
+  {
+    key: "intelligentTool",
+    label: "Herramienta inteligente por concurrencia",
+    description: "Cargo base por herramienta activa y concurrencia",
+  },
+  {
+    key: "developmentHourlyRate",
+    label: "Precio por hora desarrollador",
+    description: "Tarifa horaria que multiplica las horas de desarrollo del agente",
+  },
+  { key: "whatsappMarketing", label: "WhatsApp marketing", description: "Costo por mensaje marketing" },
+  { key: "whatsappUtility", label: "WhatsApp utilitarios", description: "Costo por mensaje utilitario" },
+  { key: "whatsappTemplate", label: "Plantilla WhatsApp", description: "Costo por alta de plantilla" },
+  { key: "geolocation", label: "Geolocalización", description: "Costo por consulta" },
+] as const;
+
+function toFiniteNumber(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+export function normalizePricingConfig(input: unknown): PricingConfig {
+  const candidate = (input ?? {}) as Partial<PricingConfig> & {
+    shared?: { developmentBasePrice?: number; developmentBaseHours?: number };
+  };
+
+  const normalizeRates = (
+    mode: PricingMode,
+    source: Partial<PricingRates> | undefined,
+  ): PricingRates => {
+    const defaults = PRICING[mode];
+    const legacyBasePrice = candidate.shared?.developmentBasePrice;
+    const legacyBaseHours = candidate.shared?.developmentBaseHours;
+    const derivedLegacyHourlyRate =
+      typeof legacyBasePrice === "number" &&
+      Number.isFinite(legacyBasePrice) &&
+      typeof legacyBaseHours === "number" &&
+      Number.isFinite(legacyBaseHours) &&
+      legacyBaseHours > 0
+        ? legacyBasePrice / legacyBaseHours
+        : defaults.developmentHourlyRate;
+
+    return {
+      minuteRate: toFiniteNumber(source?.minuteRate, defaults.minuteRate),
+      developmentHourlyRate: toFiniteNumber(source?.developmentHourlyRate, derivedLegacyHourlyRate),
+      concurrency: toFiniteNumber(source?.concurrency, defaults.concurrency),
+      intelligentTool: toFiniteNumber(source?.intelligentTool, defaults.intelligentTool),
+      platform: toFiniteNumber(source?.platform, defaults.platform),
+      whatsappMarketing: toFiniteNumber(source?.whatsappMarketing, defaults.whatsappMarketing),
+      whatsappUtility: toFiniteNumber(source?.whatsappUtility, defaults.whatsappUtility),
+      whatsappTemplate: toFiniteNumber(source?.whatsappTemplate, defaults.whatsappTemplate),
+      geolocation: toFiniteNumber(source?.geolocation, defaults.geolocation),
+    };
+  };
+
+  return {
+    client: normalizeRates("client", candidate.client),
+    reseller: normalizeRates("reseller", candidate.reseller),
+  };
+}
 
 export function createAgent(index: number): AgentQuoteInputs {
   return {
@@ -112,16 +186,20 @@ export function createAgent(index: number): AgentQuoteInputs {
   };
 }
 
+export function getPricingRates(config: PricingConfig, mode: PricingMode) {
+  return config[mode];
+}
+
 export function calculateQuote(
   mode: PricingMode,
   globalInputs: GlobalQuoteInputs,
   agents: AgentQuoteInputs[],
   pricing: PricingConfig = PRICING,
 ): QuoteBreakdown {
-  const minuteRate = pricing.minuteRate[mode];
+  const rates = getPricingRates(pricing, mode);
+  const minuteRate = rates.minuteRate;
   const monthlyMinutes = Math.max(globalInputs.minutes, 0) * minuteRate;
-  const monthlyPlatform = globalInputs.includePlatform ? pricing.platform : 0;
-  const hourlyRate = pricing.developmentBasePrice / pricing.developmentBaseHours;
+  const monthlyPlatform = globalInputs.includePlatform ? rates.platform : 0;
 
   const agentBreakdowns = agents.map((agent) => {
     const developmentHours = Math.max(agent.developmentHours, 0);
@@ -134,11 +212,11 @@ export function calculateQuote(
 
     const activeIntelligentTools =
       Number(agent.useWhatsApp) + Number(agent.includeGeolocation) + Number(agent.includeCustomTool);
-    const monthlyConcurrency = concurrency * pricing.concurrency;
-    const monthlyToolsBase = activeIntelligentTools * concurrency * pricing.intelligentTool;
-    const monthlyWhatsAppMarketing = agent.useWhatsApp ? marketingMessages * pricing.whatsappMarketing : 0;
-    const monthlyWhatsAppUtility = agent.useWhatsApp ? utilityMessages * pricing.whatsappUtility : 0;
-    const monthlyGeolocation = agent.includeGeolocation ? geolocationQueries * pricing.geolocation : 0;
+    const monthlyConcurrency = concurrency * rates.concurrency;
+    const monthlyToolsBase = activeIntelligentTools * concurrency * rates.intelligentTool;
+    const monthlyWhatsAppMarketing = agent.useWhatsApp ? marketingMessages * rates.whatsappMarketing : 0;
+    const monthlyWhatsAppUtility = agent.useWhatsApp ? utilityMessages * rates.whatsappUtility : 0;
+    const monthlyGeolocation = agent.includeGeolocation ? geolocationQueries * rates.geolocation : 0;
     const monthlyCustomTool = agent.includeCustomTool ? customToolMonthly : 0;
     const monthlySubtotal =
       monthlyConcurrency +
@@ -147,8 +225,8 @@ export function calculateQuote(
       monthlyWhatsAppUtility +
       monthlyGeolocation +
       monthlyCustomTool;
-    const setupDevelopment = developmentHours * hourlyRate;
-    const setupWhatsAppTemplates = agent.useWhatsApp ? whatsappTemplates * pricing.whatsappTemplate : 0;
+    const setupDevelopment = developmentHours * rates.developmentHourlyRate;
+    const setupWhatsAppTemplates = agent.useWhatsApp ? whatsappTemplates * rates.whatsappTemplate : 0;
     const setupSubtotal = setupDevelopment + setupWhatsAppTemplates;
 
     return {

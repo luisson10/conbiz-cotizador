@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDownRight, CheckCircle2, FileText, Settings2, Waypoints } from "lucide-react";
+import { Settings2 } from "lucide-react";
 
 import { BusinessModelExplainer } from "@/components/business-model-explainer";
 import { FaqSection } from "@/components/faq-section";
@@ -20,6 +20,7 @@ import {
   calculateQuote,
   createAgent,
   DEFAULT_GLOBAL_INPUTS,
+  normalizePricingConfig,
   PRICING,
   type PricingMode,
   type AgentQuoteInputs,
@@ -31,6 +32,7 @@ import { formatCurrency, type CurrencyCode } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "#modelo", label: "Modelo" },
   { href: "#cotizador", label: "Cotizador" },
+  { href: "/lista-de-precios", label: "Lista de precios" },
   { href: "#terminos", label: "Términos" },
   { href: "#faq", label: "FAQ" },
 ];
@@ -50,6 +52,7 @@ export function PricingPage() {
     () => calculateQuote(mode, globalInputs, agents, pricingConfig),
     [mode, globalInputs, agents, pricingConfig],
   );
+  const activeRates = pricingConfig[mode];
 
   useEffect(() => {
     const raw = window.localStorage.getItem("conbiz-pricing-config");
@@ -57,7 +60,7 @@ export function PricingPage() {
 
     try {
       const parsed = JSON.parse(raw) as PricingConfig;
-      setPricingConfig(parsed);
+      setPricingConfig(normalizePricingConfig(parsed));
     } catch {
       window.localStorage.removeItem("conbiz-pricing-config");
     }
@@ -115,53 +118,53 @@ export function PricingPage() {
 
       const parts: Array<{ label: string; value: string }> = [
         {
-          label: `${source.concurrency} concurrencias x ${formatCurrency(pricingConfig.concurrency)} c/u`,
-          value: formatCurrency(source.concurrency * pricingConfig.concurrency),
+          label: `${source.concurrency} concurrencias x ${formatCurrency(activeRates.concurrency)} c/u`,
+          value: formatCurrency(source.concurrency * activeRates.concurrency),
         },
       ];
 
       if (source.useWhatsApp) {
         parts.push({
-          label: `WhatsApp base: ${source.concurrency} x ${formatCurrency(pricingConfig.intelligentTool)}`,
-          value: formatCurrency(source.concurrency * pricingConfig.intelligentTool),
+          label: `WhatsApp base: ${source.concurrency} x ${formatCurrency(activeRates.intelligentTool)}`,
+          value: formatCurrency(source.concurrency * activeRates.intelligentTool),
         });
       }
       if (source.includeGeolocation) {
         parts.push({
-          label: `Geolocalización base: ${source.concurrency} x ${formatCurrency(pricingConfig.intelligentTool)}`,
-          value: formatCurrency(source.concurrency * pricingConfig.intelligentTool),
+          label: `Geolocalización base: ${source.concurrency} x ${formatCurrency(activeRates.intelligentTool)}`,
+          value: formatCurrency(source.concurrency * activeRates.intelligentTool),
         });
       }
       if (source.includeCustomTool) {
         parts.push({
-          label: `Personalizada base: ${source.concurrency} x ${formatCurrency(pricingConfig.intelligentTool)}`,
-          value: formatCurrency(source.concurrency * pricingConfig.intelligentTool),
+          label: `Personalizada base: ${source.concurrency} x ${formatCurrency(activeRates.intelligentTool)}`,
+          value: formatCurrency(source.concurrency * activeRates.intelligentTool),
         });
       }
       if (source.useWhatsApp) {
         if (source.marketingMessages > 0) {
           parts.push({
-            label: `${source.marketingMessages} mensajes marketing x ${formatCurrency(pricingConfig.whatsappMarketing)}`,
-            value: formatCurrency(source.marketingMessages * pricingConfig.whatsappMarketing),
+            label: `${source.marketingMessages} mensajes marketing x ${formatCurrency(activeRates.whatsappMarketing)}`,
+            value: formatCurrency(source.marketingMessages * activeRates.whatsappMarketing),
           });
         }
         if (source.utilityMessages > 0) {
           parts.push({
-            label: `${source.utilityMessages} mensajes utilitarios x ${formatCurrency(pricingConfig.whatsappUtility)}`,
-            value: formatCurrency(source.utilityMessages * pricingConfig.whatsappUtility),
+            label: `${source.utilityMessages} mensajes utilitarios x ${formatCurrency(activeRates.whatsappUtility)}`,
+            value: formatCurrency(source.utilityMessages * activeRates.whatsappUtility),
           });
         }
         if (source.whatsappTemplates > 0) {
           parts.push({
-            label: `${source.whatsappTemplates} plantillas x ${formatCurrency(pricingConfig.whatsappTemplate)}`,
-            value: formatCurrency(source.whatsappTemplates * pricingConfig.whatsappTemplate),
+            label: `${source.whatsappTemplates} plantillas x ${formatCurrency(activeRates.whatsappTemplate)}`,
+            value: formatCurrency(source.whatsappTemplates * activeRates.whatsappTemplate),
           });
         }
       }
       if (source.includeGeolocation) {
         parts.push({
-          label: `Geolocalización: ${source.geolocationQueries} consultas x ${formatCurrency(pricingConfig.geolocation)}`,
-          value: formatCurrency(source.geolocationQueries * pricingConfig.geolocation),
+          label: `Geolocalización: ${source.geolocationQueries} consultas x ${formatCurrency(activeRates.geolocation)}`,
+          value: formatCurrency(source.geolocationQueries * activeRates.geolocation),
         });
       }
       if (source.includeCustomTool && source.customToolMonthly > 0) {
@@ -214,92 +217,24 @@ export function PricingPage() {
         </header>
 
         <main className="screen-content space-y-20">
-          <section className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-            <div className="space-y-8">
-              <div className="inline-flex items-center rounded-full border border-stone-200 bg-white px-4 py-2 text-sm text-stone-600 shadow-sm">
-                Pricing para clientes finales y asociados con desglose comercial completo
-              </div>
-
-              <div className="space-y-5">
-                <h1 className="max-w-4xl text-5xl font-semibold tracking-tight text-stone-950 sm:text-6xl">
-                  Cotiza un agente Conbiz con la misma claridad con la que lo vas a vender.
-                </h1>
-                <p className="max-w-3xl text-lg leading-8 text-stone-600">
-                  Esta página separa setup, renta mensual, depósito de garantía y cargos por uso para que el modelo sea
-                  defendible ante operación, finanzas y clientes finales.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Button asChild size="lg">
-                  <Link href="#cotizador">
-                    Ir al cotizador
-                    <ArrowDownRight className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="lg">
-                  <Link href="#terminos">
-                    Ver términos
-                    <FileText className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button type="button" variant="secondary" size="lg" onClick={() => setIsPricingModalOpen(true)}>
-                  Variables de cálculo
-                  <Settings2 className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Card className="rounded-2xl p-5">
-                  <p className="text-sm text-stone-500">Precio por minuto</p>
-                  <p className="mt-2 text-2xl font-semibold text-stone-950">{formatCurrency(breakdown.minuteRate)}</p>
-                </Card>
-                <Card className="rounded-2xl p-5">
-                  <p className="text-sm text-stone-500">Setup base por agente</p>
-                  <p className="mt-2 text-2xl font-semibold text-stone-950">{formatCurrency(pricingConfig.developmentBasePrice)}</p>
-                </Card>
-                <Card className="rounded-2xl p-5">
-                  <p className="text-sm text-stone-500">Plataforma global</p>
-                  <p className="mt-2 text-2xl font-semibold text-stone-950">{formatCurrency(pricingConfig.platform)}</p>
-                </Card>
-              </div>
-            </div>
-
-            <Card className="overflow-hidden border-stone-900 bg-stone-950 p-8 text-stone-50">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-white/10 p-3">
-                  <Waypoints className="h-5 w-5" />
-                </div>
-                <p className="text-sm uppercase tracking-[0.18em] text-stone-400">Lo que ya resuelve este cotizador</p>
-              </div>
-              <div className="mt-8 space-y-4">
-                {[
-                  "Comparación inmediata entre tarifa cliente final y reseller",
-                  "Modelo modular con costos globales y tarjetas por agente",
-                  "Resumen listo para imprimir o exportar a PDF",
-                  "Explicación operativa del depósito, prepago y reglas de servicio",
-                ].map((item) => (
-                  <div key={item} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-stone-200" />
-                    <p className="text-sm leading-relaxed text-stone-300">{item}</p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </section>
-
           <BusinessModelExplainer />
 
           <section id="cotizador" className="space-y-6">
-            <div className="max-w-3xl space-y-3">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-stone-500">Cotizador dinámico</p>
-              <h2 className="text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
-                Ajusta el escenario y obtén un desglose comercial listo para presentar.
-              </h2>
-              <p className="text-base leading-7 text-stone-600">
-                Minutos y plataforma viven a nivel global. Cada agente define su propio setup, concurrencia y
-                herramientas, y el resumen consolida todo en una sola cotización.
-              </p>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-3xl space-y-3">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-stone-500">Cotizador dinámico</p>
+                <h2 className="text-3xl font-semibold tracking-tight text-stone-950 sm:text-4xl">
+                  Ajusta el escenario y obtén un desglose comercial listo para presentar.
+                </h2>
+                <p className="text-base leading-7 text-stone-600">
+                  Minutos y plataforma viven a nivel global. Cada agente define su propio setup, concurrencia y
+                  herramientas, y el resumen consolida todo en una sola cotización.
+                </p>
+              </div>
+              <Button type="button" variant="secondary" className="w-full lg:w-auto" onClick={() => setIsPricingModalOpen(true)}>
+                Variables de cálculo
+                <Settings2 className="h-4 w-4" />
+              </Button>
             </div>
 
             <PricingModeToggle mode={mode} onChange={setMode} />
