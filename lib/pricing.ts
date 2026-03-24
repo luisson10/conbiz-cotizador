@@ -67,6 +67,12 @@ export type PricingConfig = {
   reseller: PricingRates;
 };
 
+const RESELLER_MULTIPLIER = 0.84;
+
+function roundRate(value: number, decimals = 4) {
+  return Number(value.toFixed(decimals));
+}
+
 export const DEFAULT_GLOBAL_INPUTS: GlobalQuoteInputs = {
   minutes: 5000,
   includePlatform: true,
@@ -103,14 +109,14 @@ export const PRICING: PricingConfig = {
   },
   reseller: {
     minuteRate: 0.21,
-    developmentHourlyRate: 28,
-    concurrency: 30,
-    intelligentTool: 8,
-    platform: 250,
-    whatsappMarketing: 0.1,
-    whatsappUtility: 0.03,
-    whatsappTemplate: 12,
-    geolocation: 0.008,
+    developmentHourlyRate: roundRate(28 * RESELLER_MULTIPLIER, 2),
+    concurrency: roundRate(30 * RESELLER_MULTIPLIER, 2),
+    intelligentTool: roundRate(8 * RESELLER_MULTIPLIER, 2),
+    platform: roundRate(250 * RESELLER_MULTIPLIER, 2),
+    whatsappMarketing: roundRate(0.1 * RESELLER_MULTIPLIER, 4),
+    whatsappUtility: roundRate(0.03 * RESELLER_MULTIPLIER, 4),
+    whatsappTemplate: roundRate(12 * RESELLER_MULTIPLIER, 2),
+    geolocation: roundRate(0.008 * RESELLER_MULTIPLIER, 4),
   },
 } as const;
 
@@ -136,6 +142,22 @@ export const PRICE_LIST_ITEMS = [
 
 function toFiniteNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function isLegacyMirroredReseller(source: Partial<PricingRates> | undefined) {
+  if (!source) return false;
+
+  return (
+    source.minuteRate === 0.21 &&
+    source.developmentHourlyRate === 28 &&
+    source.concurrency === 30 &&
+    source.intelligentTool === 8 &&
+    source.platform === 250 &&
+    source.whatsappMarketing === 0.1 &&
+    source.whatsappUtility === 0.03 &&
+    source.whatsappTemplate === 12 &&
+    source.geolocation === 0.008
+  );
 }
 
 export function normalizePricingConfig(input: unknown): PricingConfig {
@@ -174,7 +196,7 @@ export function normalizePricingConfig(input: unknown): PricingConfig {
 
   return {
     client: normalizeRates("client", candidate.client),
-    reseller: normalizeRates("reseller", candidate.reseller),
+    reseller: normalizeRates("reseller", isLegacyMirroredReseller(candidate.reseller) ? undefined : candidate.reseller),
   };
 }
 
