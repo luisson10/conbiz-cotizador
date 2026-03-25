@@ -12,7 +12,7 @@ const FAQS = [
       "Se recomienda partir del volumen esperado de llamadas, la duración promedio y un margen operativo. Como el servicio es prepago, conviene definir un bloque que cubra el mes completo.",
   },
   {
-    question: "¿Qué incluye el desarrollo base de $2,800 USD?",
+    question: "¿Qué incluye el desarrollo del agente?",
     answer:
       "Incluye una referencia de 100 horas de desarrollo para construir el agente, integrar flujos, pruebas iniciales y ajustes base. El total puede variar si el caso de uso requiere más o menos esfuerzo.",
   },

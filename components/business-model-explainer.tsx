@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 const ITEMS = [
   {
     title: "Setup de agente",
-    description: "Base de $2,800 USD por 100 horas de desarrollo. Puede subir o bajar según alcance, integraciones y flujos requeridos.",
+    description: "Base de 100 horas de desarrollo. Puede subir o bajar según alcance, integraciones y flujos requeridos.",
     icon: BrainCircuit,
   },
   {
