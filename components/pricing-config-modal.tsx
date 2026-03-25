@@ -3,20 +3,24 @@
 import { Settings2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { useExchangeRate } from "@/hooks/use-exchange-rate";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PRICE_LIST_ITEMS, normalizePricingConfig, type PricingConfig } from "@/lib/pricing";
-import type { CurrencyCode } from "@/lib/utils";
+import { PRICE_LIST_ITEMS, normalizePricingConfig, PRICING, type PricingConfig } from "@/lib/pricing";
+import { toDisplayValue, type CurrencyCode } from "@/lib/utils";
 
 type PricingConfigModalProps = {
   open: boolean;
   pricing: PricingConfig;
   onClose: () => void;
-  onChange: (pricing: PricingConfig) => void;
-  onReset: () => void;
+  onSave: (pricing: PricingConfig) => Promise<void> | void;
 };
+
+type PricingFieldKey = keyof PricingConfig["client"];
+type PricingFieldMode = "client" | "reseller";
 
 function updatePricingValue(
   pricing: PricingConfig,
@@ -33,54 +37,80 @@ function updatePricingValue(
   };
 }
 
-export function PricingConfigModal({ open, pricing, onClose, onChange, onReset }: PricingConfigModalProps) {
+export function PricingConfigModal({ open, pricing, onClose, onSave }: PricingConfigModalProps) {
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
-  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
-  const safePricing = normalizePricingConfig(pricing);
+  const { exchangeRate } = useExchangeRate({ enabled: open });
+  const [draftPricing, setDraftPricing] = useState<PricingConfig>(normalizePricingConfig(pricing));
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const safePricing = normalizePricingConfig(draftPricing);
+
+  useEffect(() => {
+    if (!open) return;
+    setDraftPricing(normalizePricingConfig(pricing));
+    setSaveError(null);
+  }, [open, pricing]);
 
   useEffect(() => {
     if (!open) return;
 
-    let ignore = false;
+    const nextFieldValues: Record<string, string> = {};
 
-    async function loadExchangeRate() {
-      try {
-        const response = await fetch("/api/exchange-rate", { cache: "no-store" });
-        const data = (await response.json()) as { rate: number | null };
-
-        if (!ignore) {
-          setExchangeRate(data.rate);
-        }
-      } catch {
-        if (!ignore) {
-          setExchangeRate(null);
-        }
-      }
+    for (const item of PRICE_LIST_ITEMS) {
+      nextFieldValues[`client-${item.key}`] = toDisplayValue(safePricing.client[item.key], currency, exchangeRate);
+      nextFieldValues[`reseller-${item.key}`] = toDisplayValue(safePricing.reseller[item.key], currency, exchangeRate);
     }
 
-    void loadExchangeRate();
-
-    return () => {
-      ignore = true;
-    };
-  }, [open]);
+    setFieldValues(nextFieldValues);
+  }, [open, currency, exchangeRate, pricing]);
 
   if (!open) return null;
 
-  const toDisplay = (value: number) => {
-    if (!Number.isFinite(value)) return "";
-    if (currency === "MXN" && exchangeRate) return (value * exchangeRate).toFixed(4);
-    return value.toString();
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      await onSave(safePricing);
+      onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "No se pudo guardar la configuración.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const fromDisplay = (rawValue: string, fallback: number) => {
-    if (rawValue.trim() === "") return fallback;
+  const handleFieldChange = (mode: PricingFieldMode, key: PricingFieldKey, rawValue: string) => {
+    const normalizedRawValue = rawValue.replace(",", ".");
+    const fieldId = `${mode}-${key}`;
 
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) return fallback;
+    setFieldValues((current) => ({
+      ...current,
+      [fieldId]: normalizedRawValue,
+    }));
 
-    if (currency === "MXN" && exchangeRate) return Number((parsed / exchangeRate).toFixed(6));
-    return parsed;
+    if (!/^\d*\.?\d*$/.test(normalizedRawValue) || normalizedRawValue === "" || normalizedRawValue === ".") {
+      return;
+    }
+
+    const parsed = Number(normalizedRawValue);
+    if (!Number.isFinite(parsed)) return;
+
+    const nextValue =
+      currency === "MXN" && exchangeRate ? Number((parsed / exchangeRate).toFixed(6)) : parsed;
+
+    setDraftPricing((current) => updatePricingValue(current, mode, key, nextValue));
+  };
+
+  const handleFieldBlur = (mode: PricingFieldMode, key: PricingFieldKey) => {
+    const fieldId = `${mode}-${key}`;
+    const value = safePricing[mode][key];
+
+    setFieldValues((current) => ({
+      ...current,
+      [fieldId]: toDisplayValue(value, currency, exchangeRate),
+    }));
   };
 
   return (
@@ -156,19 +186,11 @@ export function PricingConfigModal({ open, pricing, onClose, onChange, onReset }
                     </Label>
                     <Input
                       id={`${item.key}-client`}
-                      type="number"
-                      step={0.01}
-                      value={toDisplay(safePricing.client[item.key])}
-                      onChange={(event) =>
-                        onChange(
-                          updatePricingValue(
-                            safePricing,
-                            "client",
-                            item.key,
-                            fromDisplay(event.target.value, safePricing.client[item.key]),
-                          ),
-                        )
-                      }
+                      type="text"
+                      inputMode="decimal"
+                      value={fieldValues[`client-${item.key}`] ?? ""}
+                      onChange={(event) => handleFieldChange("client", item.key, event.target.value)}
+                      onBlur={() => handleFieldBlur("client", item.key)}
                     />
                   </div>
                   <div className="rounded-2xl border border-stone-200 bg-white p-4">
@@ -177,19 +199,11 @@ export function PricingConfigModal({ open, pricing, onClose, onChange, onReset }
                     </Label>
                     <Input
                       id={`${item.key}-reseller`}
-                      type="number"
-                      step={0.01}
-                      value={toDisplay(safePricing.reseller[item.key])}
-                      onChange={(event) =>
-                        onChange(
-                          updatePricingValue(
-                            safePricing,
-                            "reseller",
-                            item.key,
-                            fromDisplay(event.target.value, safePricing.reseller[item.key]),
-                          ),
-                        )
-                      }
+                      type="text"
+                      inputMode="decimal"
+                      value={fieldValues[`reseller-${item.key}`] ?? ""}
+                      onChange={(event) => handleFieldChange("reseller", item.key, event.target.value)}
+                      onBlur={() => handleFieldBlur("reseller", item.key)}
                     />
                   </div>
                 </div>
@@ -197,12 +211,17 @@ export function PricingConfigModal({ open, pricing, onClose, onChange, onReset }
             </div>
           </div>
 
+          {saveError ? <div className="text-sm text-red-600">{saveError}</div> : null}
+
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={onReset}>
+            <Button type="button" variant="outline" onClick={() => setDraftPricing(PRICING)} disabled={isSaving}>
               Restablecer valores
             </Button>
-            <Button type="button" onClick={onClose}>
-              Cerrar
+            <Button type="button" variant="ghost" onClick={onClose} disabled={isSaving}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? "Guardando..." : "Guardar cambios"}
             </Button>
           </div>
         </CardContent>

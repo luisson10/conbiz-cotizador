@@ -2,14 +2,26 @@ import { NextResponse } from "next/server";
 
 const BANXICO_FIX_URL = "https://www.banxico.org.mx/apps/dao-web/4/52/Fix48.html";
 const FALLBACK_FIX_RATE = 17.6543;
-const FALLBACK_FIX_DATE = "11 de marzo de 2026";
+
+function getFallbackDate(): string {
+  return new Date().toLocaleDateString("es-MX", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
 
 function extractFixRate(html: string) {
   const normalized = html.replace(/\s+/g, " ");
   const patterns = [
-    /FIX[^0-9]{0,120}([0-9]{1,2}\.[0-9]{4})/i,
-    /D[oó]lar[^0-9]{0,160}([0-9]{1,2}\.[0-9]{4})/i,
+    // "es de 17.8047" — directly targets the rate value after "es de"
+    /es\s+de\s+([0-9]{1,2}\.[0-9]{4})/i,
+    // "FIX ... 17.8047" — allows digits (dates) in between
+    /FIX.{0,120}?([0-9]{1,2}\.[0-9]{4})/i,
+    // "17.8047 pesos"
     /([0-9]{1,2}\.[0-9]{4})\s*pesos/i,
+    // "Dólar ... 17.8047"
+    /D[oó]lar.{0,160}?([0-9]{1,2}\.[0-9]{4})/i,
   ];
 
   for (const pattern of patterns) {
@@ -42,7 +54,7 @@ export async function GET() {
     if (!response.ok) {
       return NextResponse.json({
         rate: FALLBACK_FIX_RATE,
-        date: FALLBACK_FIX_DATE,
+        date: getFallbackDate(),
         source: "Banxico FIX",
         fallback: true,
       });
@@ -55,7 +67,7 @@ export async function GET() {
     if (!rate) {
       return NextResponse.json({
         rate: FALLBACK_FIX_RATE,
-        date: date ?? FALLBACK_FIX_DATE,
+        date: date ?? getFallbackDate(),
         source: "Banxico FIX",
         fallback: true,
       });
@@ -63,14 +75,14 @@ export async function GET() {
 
     return NextResponse.json({
       rate,
-      date,
+      date: date ?? getFallbackDate(),
       source: "Banxico FIX",
-      url: BANXICO_FIX_URL,
+      fallback: false,
     });
   } catch {
     return NextResponse.json({
       rate: FALLBACK_FIX_RATE,
-      date: FALLBACK_FIX_DATE,
+      date: getFallbackDate(),
       source: "Banxico FIX",
       fallback: true,
     });

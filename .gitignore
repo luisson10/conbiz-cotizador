@@ -27,3 +27,12 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# TypeScript
+tsconfig.tsbuildinfo
+
+# Data (legacy file storage)
+data/
+
+# Misc
+.gga

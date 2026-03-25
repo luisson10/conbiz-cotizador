@@ -3,9 +3,7 @@ import { Calculator, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PricingMode } from "@/lib/pricing";
-import { formatNumber } from "@/lib/utils";
-
-type CurrencyCode = "USD" | "MXN";
+import { formatMoney, formatNumber, type CurrencyCode } from "@/lib/utils";
 
 type QuoteSummaryCardProps = {
   mode: PricingMode;
@@ -29,6 +27,7 @@ type QuoteSummaryCardProps = {
   exchangeRate: number | null;
   exchangeRateDate: string | null;
   exchangeRateSource: string | null;
+  isFallback?: boolean;
   onPrint: () => void;
 };
 
@@ -78,16 +77,6 @@ function SummaryRow({
   );
 }
 
-function money(value: number, currency: CurrencyCode, exchangeRate: number | null) {
-  const converted = currency === "MXN" && exchangeRate ? value * exchangeRate : value;
-  const displayCurrency = currency === "MXN" && exchangeRate ? "MXN" : "USD";
-  return new Intl.NumberFormat(displayCurrency === "MXN" ? "es-MX" : "en-US", {
-    style: "currency",
-    currency: displayCurrency,
-    maximumFractionDigits: 2,
-  }).format(converted);
-}
-
 export function QuoteSummaryCard({
   mode,
   minuteRate,
@@ -103,6 +92,7 @@ export function QuoteSummaryCard({
   exchangeRate,
   exchangeRateDate,
   exchangeRateSource,
+  isFallback = false,
   onPrint,
 }: QuoteSummaryCardProps) {
   const modeLabel = mode === "client" ? "Cliente final" : "Reseller";
@@ -155,6 +145,11 @@ export function QuoteSummaryCard({
                 FIX {exchangeRate.toFixed(4)} MXN/USD
                 {exchangeRateDate ? ` · ${exchangeRateDate}` : ""}
                 {exchangeRateSource ? ` · ${exchangeRateSource}` : ""}
+                {isFallback ? (
+                  <span className="ml-1 text-amber-600" title="Tipo de cambio estimado (Banxico no disponible)">
+                    (estimado)
+                  </span>
+                ) : null}
               </p>
             ) : (
               <p>Si Banxico no responde, la vista permanece en USD.</p>
@@ -165,7 +160,7 @@ export function QuoteSummaryCard({
         <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
           <p className="text-xs uppercase tracking-[0.18em] text-stone-500">Tarifa por minuto</p>
           <div className="mt-2 flex items-end justify-between gap-4">
-            <p className="text-3xl font-semibold tracking-tight text-stone-950">{money(minuteRate, currency, exchangeRate)}</p>
+            <p className="text-3xl font-semibold tracking-tight text-stone-950">{formatMoney(minuteRate, currency, exchangeRate)}</p>
             <p className="text-sm text-stone-500">{formatNumber(minutes)} min/mes</p>
           </div>
         </div>
@@ -177,26 +172,26 @@ export function QuoteSummaryCard({
           </div>
           <SummaryRow
             label="Minutos globales"
-            description={`${formatNumber(minutes)} minutos totales x ${money(minuteRate, currency, exchangeRate)}`}
-            value={money(globalMonthlySubtotal, currency, exchangeRate)}
+            description={`${formatNumber(minutes)} minutos totales x ${formatMoney(minuteRate, currency, exchangeRate)}`}
+            value={formatMoney(globalMonthlySubtotal, currency, exchangeRate)}
           />
           <SummaryRow
             label="Plataforma Conbiz"
             description="Renta mensual global de monitoreo y gestión."
-            value={money(platformMonthlySubtotal, currency, exchangeRate)}
+            value={formatMoney(platformMonthlySubtotal, currency, exchangeRate)}
           />
           {agents.map((agent) => (
             <SummaryRow
               key={agent.id}
               label={agent.name}
               detailStack={agent.monthlyDetails}
-              value={money(agent.monthlySubtotal, currency, exchangeRate)}
+              value={formatMoney(agent.monthlySubtotal, currency, exchangeRate)}
             />
           ))}
           <div className="border-t border-stone-200 pt-1">
             <SummaryRow
               label="Mensual estimado"
-              value={money(monthlySubtotal, currency, exchangeRate)}
+              value={formatMoney(monthlySubtotal, currency, exchangeRate)}
               valueSuffix={totalCurrencyLabel}
               emphasized
             />
@@ -211,21 +206,21 @@ export function QuoteSummaryCard({
           <SummaryRow
             label="Desarrollo de agentes"
             description={setupDescription}
-            value={money(setupSubtotal, currency, exchangeRate)}
+            value={formatMoney(setupSubtotal, currency, exchangeRate)}
             valueSuffix={totalCurrencyLabel}
             emphasized
           />
           <SummaryRow
             label="Depósito de garantía (2x minutos)"
             description="Respalda continuidad del servicio y es reembolsable al terminar."
-            value={money(guaranteeDeposit, currency, exchangeRate)}
+            value={formatMoney(guaranteeDeposit, currency, exchangeRate)}
             valueSuffix={totalCurrencyLabel}
             emphasized
           />
           <div className="border-t border-stone-200 pt-1">
             <SummaryRow
               label="Total de arranque estimado"
-              value={money(upfrontTotal, currency, exchangeRate)}
+              value={formatMoney(upfrontTotal, currency, exchangeRate)}
               valueSuffix={totalCurrencyLabel}
               emphasized
             />
@@ -237,14 +232,14 @@ export function QuoteSummaryCard({
           <div className="mt-3 space-y-1">
             <SummaryRow
               label="Total primer mes"
-              value={money(firstMonthTotal, currency, exchangeRate)}
+              value={formatMoney(firstMonthTotal, currency, exchangeRate)}
               valueSuffix={totalCurrencyLabel}
               emphasized
             />
             <div className="border-t border-stone-200 pt-1">
               <SummaryRow
                 label="Total a partir del segundo mes"
-                value={money(secondMonthTotal, currency, exchangeRate)}
+                value={formatMoney(secondMonthTotal, currency, exchangeRate)}
                 valueSuffix={totalCurrencyLabel}
                 emphasized
               />

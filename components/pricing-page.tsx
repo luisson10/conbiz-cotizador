@@ -3,7 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Settings2 } from "lucide-react";
+import { LogOut, Settings2 } from "lucide-react";
+
+import { useAuthContext } from "@/components/auth-provider";
+import { useExchangeRate } from "@/hooks/use-exchange-rate";
 
 import { BusinessModelExplainer } from "@/components/business-model-explainer";
 import { FaqSection } from "@/components/faq-section";
@@ -16,11 +19,11 @@ import { TermsSection } from "@/components/terms-section";
 import { PdfExportCta } from "@/components/whatsapp-cta";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { fetchPricingConfig, persistPricingConfig, subscribeToPricingConfigUpdates } from "@/lib/pricing-config-client";
 import {
   calculateQuote,
   createAgent,
   DEFAULT_GLOBAL_INPUTS,
-  normalizePricingConfig,
   PRICING,
   type PricingMode,
   type AgentQuoteInputs,
@@ -38,15 +41,14 @@ const NAV_ITEMS = [
 ];
 
 export function PricingPage() {
+  const { role, logout } = useAuthContext();
   const [mode, setMode] = useState<PricingMode>("client");
   const [globalInputs, setGlobalInputs] = useState<GlobalQuoteInputs>(DEFAULT_GLOBAL_INPUTS);
   const [agents, setAgents] = useState<AgentQuoteInputs[]>([createAgent(0)]);
   const [pricingConfig, setPricingConfig] = useState<PricingConfig>(PRICING);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
-  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
-  const [exchangeRateDate, setExchangeRateDate] = useState<string | null>(null);
-  const [exchangeRateSource, setExchangeRateSource] = useState<string | null>(null);
+  const { exchangeRate, exchangeRateDate, exchangeRateSource, isFallback } = useExchangeRate();
 
   const breakdown = useMemo(
     () => calculateQuote(mode, globalInputs, agents, pricingConfig),
@@ -55,55 +57,24 @@ export function PricingPage() {
   const activeRates = pricingConfig[mode];
 
   useEffect(() => {
-    const raw = window.localStorage.getItem("conbiz-pricing-config");
-    if (!raw) return;
-
-    try {
-      const parsed = JSON.parse(raw) as PricingConfig;
-      setPricingConfig(normalizePricingConfig(parsed));
-    } catch {
-      window.localStorage.removeItem("conbiz-pricing-config");
-    }
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem("conbiz-pricing-config", JSON.stringify(pricingConfig));
-  }, [pricingConfig]);
-
-  useEffect(() => {
     let ignore = false;
 
-    async function loadExchangeRate() {
-      try {
-        const response = await fetch("/api/exchange-rate", { cache: "no-store" });
-        if (!response.ok) {
-          throw new Error("Exchange rate unavailable");
-        }
-
-        const data = (await response.json()) as {
-          rate: number | null;
-          date: string | null;
-          source: string | null;
-        };
-
-        if (!ignore) {
-          setExchangeRate(data.rate);
-          setExchangeRateDate(data.date);
-          setExchangeRateSource(data.source);
-        }
-      } catch {
-        if (!ignore) {
-          setExchangeRate(null);
-          setExchangeRateDate(null);
-          setExchangeRateSource(null);
-        }
+    async function loadPricingConfig() {
+      const config = await fetchPricingConfig();
+      if (!ignore) {
+        setPricingConfig(config);
       }
     }
 
-    void loadExchangeRate();
+    void loadPricingConfig();
+
+    const unsubscribe = subscribeToPricingConfigUpdates(() => {
+      void loadPricingConfig();
+    });
 
     return () => {
       ignore = true;
+      unsubscribe();
     };
   }, []);
 
@@ -194,6 +165,11 @@ export function PricingPage() {
     setAgents((current) => (current.length === 1 ? current : current.filter((agent) => agent.id !== agentId)));
   };
 
+  const handleSavePricingConfig = async (nextPricing: PricingConfig) => {
+    const saved = await persistPricingConfig(nextPricing);
+    setPricingConfig(saved);
+  };
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(245,245,244,0.9),_rgba(255,255,255,1)_48%)] text-stone-950">
       <div className="absolute inset-x-0 top-0 -z-10 h-[32rem] bg-[linear-gradient(180deg,rgba(245,245,244,0.9),rgba(255,255,255,0))]" />
@@ -212,6 +188,10 @@ export function PricingPage() {
                   {item.label}
                 </Link>
               ))}
+              <Button variant="ghost" size="sm" onClick={logout} className="text-stone-500">
+                <LogOut className="h-4 w-4" />
+                Salir
+              </Button>
             </nav>
           </div>
         </header>
@@ -231,10 +211,12 @@ export function PricingPage() {
                   herramientas, y el resumen consolida todo en una sola cotización.
                 </p>
               </div>
-              <Button type="button" variant="secondary" className="w-full lg:w-auto" onClick={() => setIsPricingModalOpen(true)}>
-                Variables de cálculo
-                <Settings2 className="h-4 w-4" />
-              </Button>
+              {role === "admin" && (
+                <Button type="button" variant="secondary" className="w-full lg:w-auto" onClick={() => setIsPricingModalOpen(true)}>
+                  Variables de cálculo
+                  <Settings2 className="h-4 w-4" />
+                </Button>
+              )}
             </div>
 
             <PricingModeToggle mode={mode} onChange={setMode} />
@@ -264,6 +246,7 @@ export function PricingPage() {
                 exchangeRate={exchangeRate}
                 exchangeRateDate={exchangeRateDate}
                 exchangeRateSource={exchangeRateSource}
+                isFallback={isFallback}
                 onPrint={() => window.print()}
               />
             </div>
@@ -276,8 +259,7 @@ export function PricingPage() {
             open={isPricingModalOpen}
             pricing={pricingConfig}
             onClose={() => setIsPricingModalOpen(false)}
-            onChange={setPricingConfig}
-            onReset={() => setPricingConfig(PRICING)}
+            onSave={handleSavePricingConfig}
           />
           <PrintableQuoteView
             mode={mode}
@@ -294,6 +276,7 @@ export function PricingPage() {
             exchangeRate={exchangeRate}
             exchangeRateDate={exchangeRateDate}
             exchangeRateSource={exchangeRateSource}
+            isFallback={isFallback}
           />
         </main>
       </div>

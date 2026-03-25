@@ -1,7 +1,5 @@
 import type { PricingMode } from "@/lib/pricing";
-import { formatNumber } from "@/lib/utils";
-
-type CurrencyCode = "USD" | "MXN";
+import { formatMoney, formatNumber, type CurrencyCode } from "@/lib/utils";
 
 type PrintableQuoteViewProps = {
   mode: PricingMode;
@@ -24,17 +22,8 @@ type PrintableQuoteViewProps = {
   exchangeRate: number | null;
   exchangeRateDate: string | null;
   exchangeRateSource: string | null;
+  isFallback?: boolean;
 };
-
-function money(value: number, currency: CurrencyCode, exchangeRate: number | null) {
-  const converted = currency === "MXN" && exchangeRate ? value * exchangeRate : value;
-  const displayCurrency = currency === "MXN" && exchangeRate ? "MXN" : "USD";
-  return new Intl.NumberFormat(displayCurrency === "MXN" ? "es-MX" : "en-US", {
-    style: "currency",
-    currency: displayCurrency,
-    maximumFractionDigits: 2,
-  }).format(converted);
-}
 
 export function PrintableQuoteView({
   mode,
@@ -51,6 +40,7 @@ export function PrintableQuoteView({
   exchangeRate,
   exchangeRateDate,
   exchangeRateSource,
+  isFallback = false,
 }: PrintableQuoteViewProps) {
   const upfrontTotal = setupSubtotal + guaranteeDeposit;
   const firstMonthTotal = upfrontTotal + monthlySubtotal;
@@ -68,7 +58,7 @@ export function PrintableQuoteView({
             <p>Esquema: {mode === "client" ? "Cliente final" : "Reseller"}</p>
             <p>Minutos globales: {formatNumber(minutes)}</p>
             <p>Tipo de cambio: {currency === "MXN" && exchangeRate ? `${exchangeRate.toFixed(4)} MXN/USD` : "USD"}</p>
-            {exchangeRateDate ? <p>{exchangeRateDate}</p> : null}
+            {exchangeRateDate ? <p>{exchangeRateDate}{isFallback ? " (estimado)" : ""}</p> : null}
             {exchangeRateSource ? <p>{exchangeRateSource}</p> : null}
           </div>
         </div>
@@ -79,11 +69,11 @@ export function PrintableQuoteView({
             <div className="rounded-2xl border border-stone-200 p-4">
               <div className="flex justify-between py-2 text-sm">
                 <span>Desarrollo de agentes</span>
-                <span>{money(setupSubtotal, currency, exchangeRate)}</span>
+                <span>{formatMoney(setupSubtotal, currency, exchangeRate)}</span>
               </div>
               <div className="mt-2 flex justify-between border-t border-stone-200 pt-3 font-semibold">
                 <span>Total setup</span>
-                <span>{money(setupSubtotal, currency, exchangeRate)}</span>
+                <span>{formatMoney(setupSubtotal, currency, exchangeRate)}</span>
               </div>
             </div>
           </div>
@@ -93,17 +83,17 @@ export function PrintableQuoteView({
             <div className="rounded-2xl border border-stone-200 p-4">
               <div className="flex justify-between py-2 text-sm">
                 <span>Minutos globales</span>
-                <span>{money(globalMonthlySubtotal, currency, exchangeRate)}</span>
+                <span>{formatMoney(globalMonthlySubtotal, currency, exchangeRate)}</span>
               </div>
               <div className="flex justify-between py-2 text-sm">
                 <span>Plataforma Conbiz</span>
-                <span>{money(platformMonthlySubtotal, currency, exchangeRate)}</span>
+                <span>{formatMoney(platformMonthlySubtotal, currency, exchangeRate)}</span>
               </div>
               {agents.map((agent) => (
                 <div key={`${agent.id}-monthly`} className="py-2 text-sm">
                   <div className="flex justify-between gap-4">
                     <span>{agent.name}</span>
-                    <span>{money(agent.monthlySubtotal, currency, exchangeRate)}</span>
+                    <span>{formatMoney(agent.monthlySubtotal, currency, exchangeRate)}</span>
                   </div>
                   <div className="mt-1 space-y-1">
                     {agent.monthlyDetails.map((item) => (
@@ -117,7 +107,7 @@ export function PrintableQuoteView({
               ))}
               <div className="mt-2 flex justify-between border-t border-stone-200 pt-3 font-semibold">
                 <span>Total mensual</span>
-                <span>{money(monthlySubtotal, currency, exchangeRate)}</span>
+                <span>{formatMoney(monthlySubtotal, currency, exchangeRate)}</span>
               </div>
             </div>
           </div>
@@ -126,15 +116,15 @@ export function PrintableQuoteView({
         <div className="rounded-2xl border border-stone-200 bg-stone-50 p-5">
           <div className="flex justify-between py-2 text-sm">
             <span>Desarrollo de agentes</span>
-            <span>{money(setupSubtotal, currency, exchangeRate)}</span>
+            <span>{formatMoney(setupSubtotal, currency, exchangeRate)}</span>
           </div>
           <div className="flex justify-between py-2 text-sm">
             <span>Depósito de garantía</span>
-            <span>{money(guaranteeDeposit, currency, exchangeRate)}</span>
+            <span>{formatMoney(guaranteeDeposit, currency, exchangeRate)}</span>
           </div>
           <div className="mt-2 flex justify-between border-t border-stone-300 pt-3 text-lg font-semibold">
             <span>Total de arranque estimado</span>
-            <span>{money(upfrontTotal, currency, exchangeRate)}</span>
+            <span>{formatMoney(upfrontTotal, currency, exchangeRate)}</span>
           </div>
           <p className="mt-4 text-sm leading-relaxed text-stone-600">
             El depósito es reembolsable al finalizar el servicio y los minutos mensuales contratados no se acumulan al
@@ -146,11 +136,11 @@ export function PrintableQuoteView({
           <p className="text-xs uppercase tracking-[0.18em] text-stone-500">Totales clave</p>
           <div className="mt-3 flex justify-between py-2 text-sm font-semibold">
             <span>Total primer mes</span>
-            <span>{money(firstMonthTotal, currency, exchangeRate)}</span>
+            <span>{formatMoney(firstMonthTotal, currency, exchangeRate)}</span>
           </div>
           <div className="mt-2 flex justify-between border-t border-stone-200 pt-3 text-sm font-semibold">
             <span>Total a partir del segundo mes</span>
-            <span>{money(secondMonthTotal, currency, exchangeRate)}</span>
+            <span>{formatMoney(secondMonthTotal, currency, exchangeRate)}</span>
           </div>
         </div>
       </div>

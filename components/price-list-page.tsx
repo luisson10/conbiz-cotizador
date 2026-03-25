@@ -3,33 +3,47 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Settings2 } from "lucide-react";
+import { ArrowLeft, LogOut, Settings2 } from "lucide-react";
 
+import { useAuthContext } from "@/components/auth-provider";
 import { PricingConfigModal } from "@/components/pricing-config-modal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { PRICE_LIST_ITEMS, normalizePricingConfig, PRICING, type PricingConfig } from "@/lib/pricing";
+import { fetchPricingConfig, persistPricingConfig, subscribeToPricingConfigUpdates } from "@/lib/pricing-config-client";
+import { PRICE_LIST_ITEMS, PRICING, type PricingConfig } from "@/lib/pricing";
 import { formatCurrency } from "@/lib/utils";
 
 export function PriceListPage() {
+  const { role, logout } = useAuthContext();
   const [pricingConfig, setPricingConfig] = useState<PricingConfig>(PRICING);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
 
   useEffect(() => {
-    const raw = window.localStorage.getItem("conbiz-pricing-config");
-    if (!raw) return;
+    let ignore = false;
 
-    try {
-      const parsed = JSON.parse(raw) as PricingConfig;
-      setPricingConfig(normalizePricingConfig(parsed));
-    } catch {
-      window.localStorage.removeItem("conbiz-pricing-config");
+    async function loadPricingConfig() {
+      const config = await fetchPricingConfig();
+      if (!ignore) {
+        setPricingConfig(config);
+      }
     }
+
+    void loadPricingConfig();
+
+    const unsubscribe = subscribeToPricingConfigUpdates(() => {
+      void loadPricingConfig();
+    });
+
+    return () => {
+      ignore = true;
+      unsubscribe();
+    };
   }, []);
 
-  useEffect(() => {
-    window.localStorage.setItem("conbiz-pricing-config", JSON.stringify(pricingConfig));
-  }, [pricingConfig]);
+  const handleSavePricingConfig = async (nextPricing: PricingConfig) => {
+    const saved = await persistPricingConfig(nextPricing);
+    setPricingConfig(saved);
+  };
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(245,245,244,0.9),_rgba(255,255,255,1)_48%)] text-stone-950">
@@ -49,9 +63,15 @@ export function PriceListPage() {
                   Volver al cotizador
                 </Link>
               </Button>
-              <Button type="button" variant="secondary" onClick={() => setIsPricingModalOpen(true)}>
-                Variables de cálculo
-                <Settings2 className="h-4 w-4" />
+              {role === "admin" && (
+                <Button type="button" variant="secondary" onClick={() => setIsPricingModalOpen(true)}>
+                  Variables de cálculo
+                  <Settings2 className="h-4 w-4" />
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={logout} className="text-stone-500">
+                <LogOut className="h-4 w-4" />
+                Salir
               </Button>
             </div>
           </div>
@@ -95,8 +115,7 @@ export function PriceListPage() {
           open={isPricingModalOpen}
           pricing={pricingConfig}
           onClose={() => setIsPricingModalOpen(false)}
-          onChange={setPricingConfig}
-          onReset={() => setPricingConfig(PRICING)}
+          onSave={handleSavePricingConfig}
         />
       </div>
     </div>
