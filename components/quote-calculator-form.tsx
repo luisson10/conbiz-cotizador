@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Boxes, MapPinned, MessageSquareText, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,12 @@ function NumberField({
   min?: number;
   step?: number;
 }) {
+  const [display, setDisplay] = useState(String(value));
+
+  useEffect(() => {
+    if (Number(display) !== value) setDisplay(String(value));
+  }, [value]);
+
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
@@ -43,8 +50,19 @@ function NumberField({
         type="number"
         min={min}
         step={step}
-        value={Number.isNaN(value) ? "" : value}
-        onChange={(event) => onChange(Number(event.target.value))}
+        value={display}
+        onChange={(event) => {
+          const raw = event.target.value;
+          setDisplay(raw);
+          const num = Number(raw);
+          if (raw !== "" && !Number.isNaN(num)) onChange(num);
+        }}
+        onBlur={() => {
+          if (display === "" || Number.isNaN(Number(display))) {
+            setDisplay("0");
+            onChange(0);
+          }
+        }}
       />
       <p className="text-xs leading-relaxed text-stone-500">{description}</p>
     </div>
@@ -185,7 +203,7 @@ export function QuoteCalculatorForm({
                 <NumberField
                   id={`developmentHours-${agent.id}`}
                   label="Horas de desarrollo"
-                  description="Base referencial: 100 horas por $2,800 USD."
+                  description="Base de 100 horas estándar."
                   value={agent.developmentHours}
                   onChange={(value) => onAgentChange(agent.id, "developmentHours", value)}
                 />

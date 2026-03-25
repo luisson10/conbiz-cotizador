@@ -261,24 +261,25 @@ export function PricingPage() {
             onClose={() => setIsPricingModalOpen(false)}
             onSave={handleSavePricingConfig}
           />
-          <PrintableQuoteView
-            mode={mode}
-            minuteRate={breakdown.minuteRate}
-            minutes={globalInputs.minutes}
-            setupSubtotal={breakdown.setupSubtotal}
-            monthlySubtotal={breakdown.monthlySubtotal}
-            guaranteeDeposit={breakdown.guaranteeDeposit}
-            totalStartup={breakdown.totalStartup}
-            globalMonthlySubtotal={breakdown.monthlyMinutes}
-            platformMonthlySubtotal={breakdown.monthlyPlatform}
-            agents={agentSummary}
-            currency={currency}
-            exchangeRate={exchangeRate}
-            exchangeRateDate={exchangeRateDate}
-            exchangeRateSource={exchangeRateSource}
-            isFallback={isFallback}
-          />
         </main>
+
+        <PrintableQuoteView
+          mode={mode}
+          minuteRate={breakdown.minuteRate}
+          minutes={globalInputs.minutes}
+          setupSubtotal={breakdown.setupSubtotal}
+          monthlySubtotal={breakdown.monthlySubtotal}
+          guaranteeDeposit={breakdown.guaranteeDeposit}
+          totalStartup={breakdown.totalStartup}
+          globalMonthlySubtotal={breakdown.monthlyMinutes}
+          platformMonthlySubtotal={breakdown.monthlyPlatform}
+          agents={agentSummary}
+          currency={currency}
+          exchangeRate={exchangeRate}
+          exchangeRateDate={exchangeRateDate}
+          exchangeRateSource={exchangeRateSource}
+          isFallback={isFallback}
+        />
       </div>
     </div>
   );
